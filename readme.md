@@ -24,3 +24,19 @@ The GUI is designed to be user-friendly and clear, with separate sections for ea
 - Enter one or more device counts separated by commas (e.g., `1000,200,50`) and click **Calcular** to see the VLSM subnet allocations.
 
 This tool is useful for network administrators and students learning about IP subnetting and network design.
+
+---
+To start the script, run the following command in your terminal:
+
+```bash
+python ip_calc.py
+```
+
+You can create a shortcut to the script by creating a batch file with the following content:
+
+```batch
+@echo off
+python "C:\Path\To\ip_calc.py"
+```
+
+Replace `"C:\Path\To\ip_calc.py"` with the actual path to the script.
