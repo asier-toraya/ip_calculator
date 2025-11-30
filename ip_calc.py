@@ -133,17 +133,14 @@ def calculate_detailed_devices():
         try:
             subnet = ipaddress.IPv4Network(f"{next_addr}/{prefix}", strict=True)
             if subnet.subnet_of(base_network):
-                # Calcular máscara en formato decimal
                 mask_int = (0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF
                 mask_octets = [(mask_int >> 24) & 0xFF, (mask_int >> 16) & 0xFF, 
                                (mask_int >> 8) & 0xFF, mask_int & 0xFF]
                 mask_str = '.'.join(map(str, mask_octets))
                 
-                # Calcular primera y última IP de host
                 first_host = subnet.network_address + 1
                 last_host = subnet.broadcast_address - 1
                 
-                # Mostrar información detallada
                 output += f"Direccion de red:     {subnet.network_address}/{prefix}\n"
                 output += f"Mascara de red:       {mask_str}\n"
                 output += f"Broadcast:            {subnet.broadcast_address}\n"
@@ -342,10 +339,138 @@ def verify_subnet_answers():
         all_correct = False
     
     practice_feedback.delete('1.0', tk.END)
-    output = "RESULTADOS\n" + "=" * 80 + "\n\n"
-    output += "\n".join(results) + "\n\n"
-    output += "EXCELENTE! Todas correctas.\n" if all_correct else "Revisa las respuestas en rojo.\n"
-    practice_feedback.insert('1.0', output)
+    new_prefix = base_network.prefixlen + bits_needed
+    
+    if new_prefix > 30:
+        cpt_text.insert('1.0', f"ERROR: /{new_prefix} excede el limite practico (/30)")
+        return
+    
+    subnets = list(base_network.subnets(new_prefix=new_prefix))[:num_subnets]
+    
+    output = "=" * 90 + "\n"
+    output += "ESQUEMA DE RED PARA CISCO PACKET TRACER\n"
+    output += "=" * 90 + "\n\n"
+    
+    output += f"RED BASE: {base_network}\n"
+    output += f"SUBREDES TOTALES: {num_subnets}\n"
+    output += f"ROUTERS: {num_routers}\n"
+    output += f"SWITCHES: {num_switches}\n"
+    output += f"NUEVA MASCARA: /{new_prefix}\n\n"
+    
+    mask_int = (0xFFFFFFFF << (32 - new_prefix)) & 0xFFFFFFFF
+    mask_octets = [(mask_int >> 24) & 0xFF, (mask_int >> 16) & 0xFF, 
+                   (mask_int >> 8) & 0xFF, mask_int & 0xFF]
+    subnet_mask = '.'.join(map(str, mask_octets))
+    
+    output += "=" * 90 + "\n"
+    output += "TOPOLOGIA DE RED\n"
+    output += "=" * 90 + "\n\n"
+    
+    switches_per_subnet = num_switches // num_subnets
+    extra_switches = num_switches % num_subnets
+    
+    device_counter = 1
+    switch_counter = 1
+    
+    for subnet_idx, (subnet, num_devices) in enumerate(zip(subnets, devices_list), 1):
+        output += f"\n{'#' * 90}\n"
+        output += f"SUBRED {subnet_idx}\n"
+        output += f"{'#' * 90}\n\n"
+        
+        output += f"INFORMACION DE LA SUBRED:\n"
+        output += f"{'-' * 90}\n"
+        output += f"  Direccion de red:     {subnet.network_address}/{new_prefix}\n"
+        output += f"  Mascara de subred:    {subnet_mask}\n"
+        output += f"  Broadcast:            {subnet.broadcast_address}\n"
+        output += f"  Gateway (Router):     {subnet.network_address + 1}\n"
+        output += f"  Rango de hosts:       {subnet.network_address + 2} - {subnet.broadcast_address - 1}\n"
+        output += f"  Hosts disponibles:    {subnet.num_addresses - 2}\n"
+        output += f"  Dispositivos:         {num_devices}\n\n"
+        
+        router_num = ((subnet_idx - 1) % num_routers) + 1
+        router_ip = subnet.network_address + 1
+        
+        output += f"ROUTER {router_num} (Interfaz GigabitEthernet 0/{subnet_idx - 1}):\n"
+        output += f"{'-' * 90}\n"
+        output += f"  IPv4 Address:         {router_ip}\n"
+        output += f"  Subnet Mask:          {subnet_mask}\n"
+        output += f"  Tx Ring Limit:        10000\n"
+        output += f"  Conectado a:          Switch {switch_counter}\n"
+        output += f"  Descripcion:          Gateway para Subred {subnet_idx}\n\n"
+        
+        num_switches_here = switches_per_subnet + (1 if subnet_idx <= extra_switches else 0)
+        switches_in_subnet = []
+        
+        for sw_idx in range(num_switches_here):
+            sw_num = switch_counter + sw_idx
+            switches_in_subnet.append(sw_num)
+            
+            output += f"SWITCH {sw_num} (Switch2960):\n"
+            output += f"{'-' * 90}\n"
+            output += f"  VLAN 1:               Activa (Default)\n"
+            output += f"  VLAN {subnet_idx}0:           Subred {subnet_idx}\n"
+            output += f"  Tx Ring Limit:        10000\n"
+            
+            if sw_idx == 0:
+                output += f"  Puerto Fa0/1:         TRUNK - Conectado a Router {router_num} (Gig0/{subnet_idx - 1})\n"
+            else:
+                output += f"  Puerto Fa0/1:         TRUNK - Conectado a Switch {switch_counter}\n"
+            
+            devices_per_switch = num_devices // num_switches_here
+            if sw_idx < num_devices % num_switches_here:
+                devices_per_switch += 1
+            
+            output += f"  Puertos Fa0/2-24:     ACCESS - VLAN {subnet_idx}0 ({devices_per_switch} dispositivos)\n\n"
+        
+        output += f"DISPOSITIVOS EN SUBRED {subnet_idx}:\n"
+        output += f"{'-' * 90}\n"
+        
+        current_ip = subnet.network_address + 2
+        devices_per_switch = num_devices // len(switches_in_subnet)
+        extra_devices = num_devices % len(switches_in_subnet)
+        
+        for sw_idx, sw_num in enumerate(switches_in_subnet):
+            devices_here = devices_per_switch + (1 if sw_idx < extra_devices else 0)
+            
+            for dev_idx in range(devices_here):
+                if current_ip >= subnet.broadcast_address:
+                    break
+                    
+                port_num = (dev_idx % 23) + 2
+                
+                output += f"  PC{device_counter}:\n"
+                output += f"    IPv4 Address:       {current_ip}\n"
+                output += f"    Subnet Mask:        {subnet_mask}\n"
+                output += f"    Default Gateway:    {router_ip}\n"
+                output += f"    Conectado a:        Switch {sw_num} - Puerto Fa0/{port_num}\n"
+                output += f"    VLAN:               {subnet_idx}0\n\n"
+                
+                current_ip = ipaddress.IPv4Address(int(current_ip) + 1)
+                device_counter += 1
+        
+        switch_counter += num_switches_here
+    
+    if num_routers > 1:
+        output += f"\n{'=' * 90}\n"
+        output += "INTERCONEXION DE ROUTERS\n"
+        output += f"{'=' * 90}\n\n"
+        output += "NOTA: Conectar los routers entre si usando interfaces seriales o GigabitEthernet\n"
+        output += "      adicionales para permitir enrutamiento entre subredes.\n\n"
+        
+        for r in range(1, num_routers + 1):
+            if r < num_routers:
+                output += f"  Router {r} Serial0/0/0 <---> Router {r + 1} Serial0/0/1\n"
+    
+    output += f"\n{'=' * 90}\n"
+    output += "CONFIGURACION ADICIONAL RECOMENDADA\n"
+    output += f"{'=' * 90}\n\n"
+    output += "1. Configurar enrutamiento estatico o dinamico (RIP, OSPF) entre routers\n"
+    output += "2. Configurar VLANs en los switches segun se indica\n"
+    output += "3. Verificar conectividad con ping entre dispositivos\n"
+    output += "4. Configurar nombres de host en todos los dispositivos\n"
+    output += "5. Guardar las configuraciones (write memory)\n\n"
+    
+    cpt_text.insert('1.0', output)
 
 # GUI
 root = tk.Tk()
@@ -513,5 +638,89 @@ COMO USAR:
 Presiona un boton arriba para comenzar!
 """
 practice_feedback.insert('1.0', initial_msg)
+
+# TAB 3 - CPT
+tab3 = ttk.Frame(notebook)
+notebook.add(tab3, text="CPT - Cisco Packet Tracer")
+
+cpt_main = tk.Frame(tab3, padx=20, pady=20)
+cpt_main.pack(fill=tk.BOTH, expand=True)
+
+tk.Label(cpt_main, text="GENERADOR DE ESQUEMAS PARA CISCO PACKET TRACER", 
+         font=('Arial', 16, 'bold'), fg='#FF6600').pack(pady=10)
+tk.Label(cpt_main, text="Genera configuraciones detalladas listas para implementar", 
+         font=('Arial', 10, 'italic')).pack(pady=5)
+
+ttk.Separator(cpt_main, orient='horizontal').pack(fill=tk.X, pady=15)
+
+input_cpt_frame = tk.LabelFrame(cpt_main, text="Parametros de Red", font=('Arial', 11, 'bold'), padx=15, pady=15)
+input_cpt_frame.pack(fill=tk.X, pady=10)
+
+tk.Label(input_cpt_frame, text="Direccion IP base (ej: 192.168.1.0/24):", font=('Arial', 10)).grid(row=0, column=0, sticky='w', pady=5)
+entry_cpt_ip = tk.Entry(input_cpt_frame, width=30, font=('Arial', 10))
+entry_cpt_ip.grid(row=0, column=1, pady=5, padx=10)
+entry_cpt_ip.insert(0, "192.168.1.0/24")
+
+tk.Label(input_cpt_frame, text="Numero de subredes:", font=('Arial', 10)).grid(row=1, column=0, sticky='w', pady=5)
+entry_cpt_subnets = tk.Entry(input_cpt_frame, width=30, font=('Arial', 10))
+entry_cpt_subnets.grid(row=1, column=1, pady=5, padx=10)
+entry_cpt_subnets.insert(0, "4")
+
+tk.Label(input_cpt_frame, text="Numero de routers:", font=('Arial', 10)).grid(row=2, column=0, sticky='w', pady=5)
+entry_cpt_routers = tk.Entry(input_cpt_frame, width=30, font=('Arial', 10))
+entry_cpt_routers.grid(row=2, column=1, pady=5, padx=10)
+entry_cpt_routers.insert(0, "2")
+
+tk.Label(input_cpt_frame, text="Numero de switches:", font=('Arial', 10)).grid(row=3, column=0, sticky='w', pady=5)
+entry_cpt_switches = tk.Entry(input_cpt_frame, width=30, font=('Arial', 10))
+entry_cpt_switches.grid(row=3, column=1, pady=5, padx=10)
+entry_cpt_switches.insert(0, "4")
+
+tk.Label(input_cpt_frame, text="Dispositivos por subred (separados por coma):", font=('Arial', 10)).grid(row=4, column=0, sticky='w', pady=5)
+entry_cpt_devices = tk.Entry(input_cpt_frame, width=30, font=('Arial', 10))
+entry_cpt_devices.grid(row=4, column=1, pady=5, padx=10)
+entry_cpt_devices.insert(0, "10,15,8,12")
+
+tk.Button(input_cpt_frame, text="Generar Esquema CPT", command=generate_cpt_schema,
+          bg='#FF6600', fg='white', font=('Arial', 11, 'bold'), padx=20, pady=10).grid(row=5, column=0, columnspan=2, pady=15)
+
+result_cpt_frame = tk.Frame(cpt_main, padx=10, pady=10)
+result_cpt_frame.pack(fill=tk.BOTH, expand=True)
+
+cpt_scrollbar = tk.Scrollbar(result_cpt_frame)
+cpt_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+cpt_text = tk.Text(result_cpt_frame, height=25, wrap=tk.WORD, font=('Courier New', 9), yscrollcommand=cpt_scrollbar.set)
+cpt_text.pack(fill=tk.BOTH, expand=True)
+cpt_scrollbar.config(command=cpt_text.yview)
+
+cpt_instructions = """BIENVENIDO AL GENERADOR DE ESQUEMAS CPT
+
+Este generador crea configuraciones detalladas para implementar en Cisco Packet Tracer.
+
+INSTRUCCIONES:
+1. Ingresa la direccion IP base con mascara CIDR (ej: 192.168.1.0/24)
+2. Especifica el numero de subredes que necesitas
+3. Indica cuantos routers y switches tendras
+4. Ingresa el numero de dispositivos por subred separados por comas
+   (debe coincidir con el numero de subredes)
+
+EJEMPLO:
+- IP base: 192.168.1.0/24
+- Subredes: 4
+- Routers: 2
+- Switches: 4
+- Dispositivos: 10,15,8,12
+
+El sistema generara:
+✓ Configuracion detallada de cada subred
+✓ Asignacion de IPs para routers (gateways)
+✓ Configuracion de switches con VLANs
+✓ Asignacion de IPs para todos los dispositivos
+✓ Topologia de conexiones
+
+Presiona "Generar Esquema CPT" para comenzar!
+"""
+cpt_text.insert('1.0', cpt_instructions)
 
 root.mainloop()
