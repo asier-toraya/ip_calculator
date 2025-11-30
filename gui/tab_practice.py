@@ -140,7 +140,35 @@ Presiona un boton arriba para comenzar!
         output = f"EJERCICIO BASICO\n{'=' * 80}\n\nIP: {ip}/{cidr}\n\n"
         output += "CALCULA:\n1. Mascara de red\n2. Direccion de red\n3. Broadcast\n"
         output += "4. Salto de bloque\n5. Primer host\n6. Ultimo host\n\n"
+        
         output += "GUIA DE CALCULO RAPIDO\n" + "=" * 80 + "\n\n"
+        output += "1. MASCARA DE RED:\n"
+        output += f"   /{cidr} = {cidr} bits en 1\n"
+        output += f"   {cidr} / 8 = {cidr // 8} octetos completos en 255\n"
+        if cidr % 8 != 0:
+            remaining = cidr % 8
+            values = [128, 192, 224, 240, 248, 252, 254, 255]
+            output += f"   Quedan {remaining} bits -> Octeto {cidr // 8 + 1} = {values[remaining - 1]}\n"
+        output += "   Resto de octetos = 0\n\n"
+        
+        output += "2. DIRECCION DE RED:\n"
+        output += "   Haz AND entre IP y Mascara (bit a bit)\n"
+        output += "   TRUCO: Octetos con mascara 255 quedan igual\n"
+        output += "          Octetos con mascara 0 se vuelven 0\n\n"
+        
+        output += "3. BROADCAST:\n"
+        output += "   Wildcard = 255.255.255.255 - Mascara\n"
+        output += "   Broadcast = Red + Wildcard\n"
+        output += "   TRUCO: Donde mascara es 0, broadcast es 255\n\n"
+        
+        output += "4. SALTO DE BLOQUE:\n"
+        output += "   Busca ultimo octeto de mascara que NO sea 255\n"
+        output += "   Salto = 256 - ese octeto\n\n"
+        
+        output += "5-6. HOSTS:\n"
+        output += "   Primer host = Red + 1\n"
+        output += "   Ultimo host = Broadcast - 1\n\n"
+        
         output += "TABLA DE REFERENCIA:\n"
         output += "/8  -> 255.0.0.0       | /24 -> 255.255.255.0\n"
         output += "/16 -> 255.255.0.0     | /25 -> 255.255.255.128\n"
@@ -170,7 +198,15 @@ Presiona un boton arriba para comenzar!
         output = f"EJERCICIO DE SUBREDES\n{'=' * 80}\n\n"
         output += f"Red base: {ip}/{cidr}\n"
         output += f"Numero de subredes necesarias: {num_subnets}\n\n"
-        output += "CALCULA:\n1. Bits necesarios\n2. Nueva mascara (formato /XX)\n3. Hosts por subred\n"
+        output += "CALCULA:\n1. Bits necesarios\n2. Nueva mascara (formato /XX)\n3. Hosts por subred\n\n"
+        
+        output += "GUIA DE CALCULO:\n"
+        output += "1. Bits prestados (n) = log2(subredes) redondeado arriba\n"
+        output += "   Ejemplo: para 5 subredes -> 2^2=4 (no alcanza), 2^3=8 (si alcanza) -> 3 bits\n\n"
+        output += "2. Nueva mascara = Mascara original + Bits prestados\n"
+        output += f"   Ejemplo: /{cidr} + n\n\n"
+        output += "3. Hosts por subred = 2^(32 - nueva mascara) - 2\n"
+        output += "   (Se restan 2 por la direccion de red y el broadcast)\n"
         
         self.feedback_text.insert('1.0', output)
     
