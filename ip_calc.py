@@ -112,6 +112,10 @@ def calculate_detailed_devices():
     detailed_text.delete('1.0', tk.END)
     devices_list_sorted = sorted(devices_list, reverse=True)
     output = "SUBREDES POR DISPOSITIVOS\n" + "=" * 80 + "\n\n"
+    output += f"Red base: {base_network}\n"
+    output += f"Dispositivos solicitados: {', '.join(map(str, devices_list))}\n"
+    output += f"Ordenados (mayor a menor): {', '.join(map(str, devices_list_sorted))}\n\n"
+    
     next_addr = base_network.network_address
     
     for idx, num_dev in enumerate(devices_list_sorted, 1):
@@ -119,20 +123,41 @@ def calculate_detailed_devices():
         bits = math.ceil(math.log2(needed))
         prefix = 32 - bits
         
+        output += f"SUBRED {idx}: {num_dev} dispositivos\n"
+        output += "-" * 80 + "\n"
+        
         if prefix < base_network.prefixlen:
-            output += f"{idx}. {num_dev} dispositivos: ERROR (muy grande)\n"
+            output += f"ERROR: Subred muy grande para la red base\n\n"
             continue
         
         try:
             subnet = ipaddress.IPv4Network(f"{next_addr}/{prefix}", strict=True)
             if subnet.subnet_of(base_network):
-                output += f"{idx}. {num_dev} disp: {subnet.network_address}/{prefix} - {subnet.broadcast_address}\n"
-                output += f"    Hosts: {subnet.num_addresses - 2} (desperdiciados: {subnet.num_addresses - 2 - num_dev})\n"
+                # Calcular máscara en formato decimal
+                mask_int = (0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF
+                mask_octets = [(mask_int >> 24) & 0xFF, (mask_int >> 16) & 0xFF, 
+                               (mask_int >> 8) & 0xFF, mask_int & 0xFF]
+                mask_str = '.'.join(map(str, mask_octets))
+                
+                # Calcular primera y última IP de host
+                first_host = subnet.network_address + 1
+                last_host = subnet.broadcast_address - 1
+                
+                # Mostrar información detallada
+                output += f"Direccion de red:     {subnet.network_address}/{prefix}\n"
+                output += f"Mascara de red:       {mask_str}\n"
+                output += f"Broadcast:            {subnet.broadcast_address}\n"
+                output += f"Hosts disponibles:    {subnet.num_addresses - 2}\n"
+                output += f"Primera IP host:      {first_host}\n"
+                output += f"Ultima IP host:       {last_host}\n"
+                output += f"Hosts desperdiciados: {subnet.num_addresses - 2 - num_dev}\n"
+                output += f"Calculo: 2^{bits} - 2 = {2**bits} - 2 = {2**bits - 2} hosts\n\n"
+                
                 next_addr = ipaddress.IPv4Address(int(subnet.broadcast_address) + 1)
             else:
-                output += f"{idx}. ERROR: Excede red base\n"
-        except:
-            output += f"{idx}. ERROR\n"
+                output += f"ERROR: Excede la red base\n\n"
+        except Exception as e:
+            output += f"ERROR: {str(e)}\n\n"
     
     detailed_text.insert('1.0', output)
 
@@ -190,19 +215,20 @@ def start_basic_practice():
     output += "/16 -> 255.255.0.0     | /25 -> 255.255.255.128\n"
     output += "/26 -> 255.255.255.192 | /27 -> 255.255.255.224\n"
     output += "/28 -> 255.255.255.240 | /29 -> 255.255.255.248\n"
-    output += "/30 -> 255.255.255.252\n\n"
-    output += "Completa los campos y presiona 'Verificar'!\n"
+    output += "/30 -> 255.255.255.252\n"
+    
     practice_feedback.insert('1.0', output)
 
 def start_subnet_practice():
     practice_state['mode'] = 'subnets'
-    base_cidr = random.choice([16, 24])
-    ip = f"172.{random.randint(16, 31)}.0.0" if base_cidr == 16 else f"192.168.{random.randint(1, 254)}.0"
-    num_subnets = random.choice([2, 4, 8, 16])
+    octets = [random.randint(1, 254) for _ in range(4)]
+    ip = '.'.join(map(str, octets))
+    cidr = random.choice([16, 20, 24])
+    num_subnets = random.randint(2, 8)
+    
     practice_state['ip'] = ip
-    practice_state['cidr'] = base_cidr
+    practice_state['cidr'] = cidr
     practice_state['num_subnets'] = num_subnets
-    practice_state['network'] = ipaddress.IPv4Network(f"{ip}/{base_cidr}", strict=False)
     
     for entry in [practice_subnet_bits_entry, practice_subnet_newmask_entry, practice_subnet_hosts_entry]:
         entry.delete(0, tk.END)
@@ -210,23 +236,16 @@ def start_subnet_practice():
     
     practice_feedback.delete('1.0', tk.END)
     output = f"EJERCICIO DE SUBREDES\n{'=' * 80}\n\n"
-    output += f"Red base: {ip}/{base_cidr}\nSubredes a crear: {num_subnets}\n\n"
-    output += "CALCULA:\n1. Bits necesarios\n2. Nueva mascara (/XX)\n3. Hosts por subred\n\n"
+    output += f"Red base: {ip}/{cidr}\n"
+    output += f"Numero de subredes necesarias: {num_subnets}\n\n"
+    output += "CALCULA:\n1. Bits necesarios para las subredes\n"
+    output += "2. Nueva mascara (formato /XX)\n"
+    output += "3. Hosts por subred\n\n"
+    output += "GUIA:\n"
+    output += "1. Bits = log2(subredes) redondeado arriba\n"
+    output += "2. Nueva mascara = mascara base + bits\n"
+    output += "3. Hosts = 2^(32 - nueva mascara) - 2\n"
     
-    output += "GUIA DE CALCULO:\n" + "=" * 80 + "\n\n"
-    output += "1. BITS NECESARIOS:\n"
-    output += f"   Formula: 2^n >= {num_subnets}\n"
-    output += "   Prueba: 2^1=2, 2^2=4, 2^3=8, 2^4=16...\n"
-    output += "   Usa el primer valor que sea >= al numero de subredes\n\n"
-    
-    output += "2. NUEVA MASCARA:\n"
-    output += f"   Nueva mascara = /{base_cidr} + bits necesarios\n"
-    output += "   Ejemplo: Si necesitas 3 bits, nueva mascara = /{base_cidr + 3}\n\n"
-    
-    output += "3. HOSTS POR SUBRED:\n"
-    output += "   Formula: 2^(32 - nueva_mascara) - 2\n"
-    output += "   El -2 es por red y broadcast\n\n"
-    output += "Completa y presiona 'Verificar'!\n"
     practice_feedback.insert('1.0', output)
 
 def verify_basic_answers():
