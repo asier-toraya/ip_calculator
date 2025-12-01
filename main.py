@@ -5,7 +5,7 @@ Descripción: Calculadora completa de redes IP con funciones de cálculo detalla
              práctica guiada y generación de esquemas para Cisco Packet Tracer.
 """
 
-from gui import MainWindow, DetailedTab, PracticeTab, CPTTab
+from gui import MainWindow, DetailedTab, PracticeTab, CPTTab, CPTAdvancedTab
 
 
 def main():
@@ -22,6 +22,9 @@ def main():
     
     tab3 = CPTTab(app.notebook)
     app.add_tab(tab3, "CPT - Cisco Packet Tracer")
+    
+    tab4 = CPTAdvancedTab(app.notebook)
+    app.add_tab(tab4, "CPT Avanzado")
     
     # Iniciar aplicación
     app.run()
