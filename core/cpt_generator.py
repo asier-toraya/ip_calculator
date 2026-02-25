@@ -1,230 +1,274 @@
-"""
-Generador de esquemas para Cisco Packet Tracer
-"""
+"""Cisco Packet Tracer topology generator (basic mode)."""
+
+from __future__ import annotations
+
 import ipaddress
 import math
 
+from .ip_tools import align_address_to_prefix
+
 
 def generate_cpt_topology(base_network, num_subnets, num_routers, num_switches, devices_list):
-    """
-    Genera un esquema completo de topología para Cisco Packet Tracer usando VLSM
-    Soporta switches compartidos y salida resumida.
-    Returns: (str output, str error_message or None)
-    """
-    # Validar que hay suficientes dispositivos especificados
-    if len(devices_list) != num_subnets:
-        return None, f"Debes especificar {num_subnets} valores de dispositivos. Ingresaste {len(devices_list)}"
-    
-    # NOTA: Eliminada la restricción de num_switches < num_subnets para permitir switches compartidos
+    """Generate a complete CPT topology using VLSM."""
+    if num_subnets < 1:
+        return None, "El numero de subredes debe ser mayor a 0."
+    if num_routers < 1:
+        return None, "El numero de routers debe ser mayor a 0."
+    if num_switches < 1:
+        return None, "El numero de switches debe ser mayor a 0."
 
-    # --- LOGICA VLSM ---
-    devices_sorted_indices = sorted(range(len(devices_list)), key=lambda k: devices_list[k], reverse=True)
-    devices_sorted = [devices_list[i] for i in devices_sorted_indices]
-    
-    # Estructura para guardar la asignación completa
+    if len(devices_list) != num_subnets:
+        return None, (
+            f"Debes especificar {num_subnets} valores de dispositivos. "
+            f"Ingresaste {len(devices_list)}"
+        )
+
+    if any(hosts < 1 for hosts in devices_list):
+        return None, "Todos los valores de dispositivos deben ser mayores a 0."
+
+    sorted_indexes = sorted(range(len(devices_list)), key=lambda idx: devices_list[idx], reverse=True)
+    sorted_devices = [devices_list[idx] for idx in sorted_indexes]
+
     topology_data = []
-    
     current_ip = base_network.network_address
-    
-    for i, original_idx in enumerate(devices_sorted_indices):
-        num_hosts = devices_sorted[i]
-        
-        # Calcular bits necesarios
+
+    for index, num_hosts in enumerate(sorted_devices, start=1):
         needed = num_hosts + 2
-        bits = math.ceil(math.log2(needed))
-        prefix = 32 - bits
-        
+        host_bits = math.ceil(math.log2(needed))
+        prefix = 32 - host_bits
+
         if prefix < base_network.prefixlen:
-            return None, f"El grupo de {num_hosts} dispositivos requiere /{prefix}, que es más grande que la red base"
-        
+            return None, (
+                f"El grupo de {num_hosts} dispositivos requiere /{prefix}, "
+                "mas grande que la red base."
+            )
         if prefix > 30:
-             return None, f"El grupo de {num_hosts} dispositivos requiere /{prefix}, excede límite práctico (/30)"
+            return None, (
+                f"El grupo de {num_hosts} dispositivos requiere /{prefix}, "
+                "excede limite practico (/30)."
+            )
+
+        aligned_ip = align_address_to_prefix(current_ip, prefix)
 
         try:
-            # Alineación VLSM
-            block_size = 2**(32 - prefix)
-            ip_int = int(current_ip)
-            if ip_int % block_size != 0:
-                padding = block_size - (ip_int % block_size)
-                current_ip = ipaddress.IPv4Address(ip_int + padding)
-            
-            subnet = ipaddress.IPv4Network(f"{current_ip}/{prefix}", strict=True)
-            
-            if not subnet.subnet_of(base_network):
-                return None, f"No hay espacio suficiente en la red base para el grupo de {num_hosts} dispositivos."
-            
-            # Asignar recursos (Router, Switch, VLAN)
-            # ID lógico para mostrar al usuario (1, 2, 3...)
-            subnet_id = i + 1 
-            
-            # Asignación Round-Robin de Routers y Switches
-            router_id = (i % num_routers) + 1
-            switch_id = (i % num_switches) + 1
-            vlan_id = subnet_id * 10 # VLAN 10, 20, 30...
-            
-            topology_data.append({
-                'id': subnet_id,
-                'num_hosts': num_hosts,
-                'subnet': subnet,
-                'router_id': router_id,
-                'switch_id': switch_id,
-                'vlan_id': vlan_id,
-                'gateway': subnet.network_address + 1,
-                'mask_str': str(subnet.netmask)
-            })
-            
-            current_ip = ipaddress.IPv4Address(int(subnet.broadcast_address) + 1)
-            
-        except Exception as e:
-            return None, f"Error al calcular subred: {e}"
+            subnet = ipaddress.IPv4Network(f"{aligned_ip}/{prefix}", strict=True)
+        except ValueError as error:
+            return None, f"Error al calcular subred: {error}"
 
-    # Generar output estructurado
+        if not subnet.subnet_of(base_network):
+            return None, (
+                "No hay espacio suficiente en la red base para el grupo "
+                f"de {num_hosts} dispositivos."
+            )
+
+        router_id = ((index - 1) % num_routers) + 1
+        switch_id = ((index - 1) % num_switches) + 1
+        vlan_id = index * 10
+
+        topology_data.append(
+            {
+                "id": index,
+                "num_hosts": num_hosts,
+                "subnet": subnet,
+                "router_id": router_id,
+                "switch_id": switch_id,
+                "vlan_id": vlan_id,
+                "gateway": subnet.network_address + 1,
+                "mask_str": str(subnet.netmask),
+            }
+        )
+
+        current_ip = ipaddress.IPv4Address(int(subnet.broadcast_address) + 1)
+
     output = _generate_header(base_network, num_subnets, num_routers, num_switches)
     output += _generate_router_section(topology_data, num_routers)
     output += _generate_switch_section(topology_data, num_switches)
     output += _generate_devices_section(topology_data)
+    output += _generate_router_interconnection(num_routers)
     output += _generate_recommendations()
-    
     return output, None
 
 
 def _generate_header(base_network, num_subnets, num_routers, num_switches):
-    output = "=" * 90 + "\n"
-    output += "ESQUEMA DE RED PARA CISCO PACKET TRACER (VLSM)\n"
-    output += "=" * 90 + "\n\n"
-    output += f"RED BASE: {base_network}\n"
-    output += f"SUBREDES: {num_subnets} | ROUTERS: {num_routers} | SWITCHES: {num_switches}\n"
-    output += f"METODO: VLSM (Ordenado por tamaño de mayor a menor)\n\n"
-    return output
+    lines = [
+        "=" * 90,
+        "ESQUEMA DE RED PARA CISCO PACKET TRACER (VLSM)",
+        "=" * 90,
+        "",
+        f"RED BASE: {base_network}",
+        f"SUBREDES: {num_subnets} | ROUTERS: {num_routers} | SWITCHES: {num_switches}",
+        "METODO: VLSM (Ordenado por tamano de mayor a menor)",
+        "",
+    ]
+    return "\n".join(lines)
 
 
 def _generate_router_section(topology_data, num_routers):
-    output = "=" * 90 + "\n"
-    output += "1. CONFIGURACION DE ROUTERS\n"
-    output += "=" * 90 + "\n"
-    
-    # Agrupar por router
-    routers = {r: [] for r in range(1, num_routers + 1)}
-    for data in topology_data:
-        routers[data['router_id']].append(data)
-        
-    for r_id in range(1, num_routers + 1):
-        output += f"\nROUTER {r_id}\n"
-        output += "-" * 90 + "\n"
-        
-        subnets = routers[r_id]
-        if not subnets:
-            output += "  (Sin subredes asignadas)\n"
+    lines = ["=" * 90, "1. CONFIGURACION DE ROUTERS", "=" * 90]
+
+    routers = {router_id: [] for router_id in range(1, num_routers + 1)}
+    for subnet_data in topology_data:
+        routers[subnet_data["router_id"]].append(subnet_data)
+
+    for router_id in range(1, num_routers + 1):
+        lines.extend(["", f"ROUTER {router_id}", "-" * 90])
+        assigned = routers[router_id]
+        if not assigned:
+            lines.append("  (Sin subredes asignadas)")
             continue
-            
-        for i, sub in enumerate(subnets):
-            # Usamos interfaces físicas diferentes para cada subred para simplificar
-            # En un escenario real avanzado se usarían subinterfaces (RoAS)
-            output += f"  Interfaz GigabitEthernet 0/{i}:\n"
-            output += f"    Descripcion:  Gateway Subred {sub['id']} (VLAN {sub['vlan_id']})\n"
-            output += f"    IP Address:   {sub['gateway']}\n"
-            output += f"    Subnet Mask:  {sub['mask_str']}\n"
-            output += f"    Conectar a:   Switch {sub['switch_id']}\n\n"
-            
-    return output
+
+        for interface_index, subnet_data in enumerate(assigned):
+            lines.extend(
+                [
+                    f"  Interfaz GigabitEthernet 0/{interface_index}:",
+                    (
+                        "    Descripcion:  Gateway Subred "
+                        f"{subnet_data['id']} (VLAN {subnet_data['vlan_id']})"
+                    ),
+                    f"    IP Address:   {subnet_data['gateway']}",
+                    f"    Subnet Mask:  {subnet_data['mask_str']}",
+                    f"    Conectar a:   Switch {subnet_data['switch_id']}",
+                    "",
+                ]
+            )
+
+    return "\n".join(lines)
+
+
+def _distribute_access_ports(available_ports, num_segments):
+    if num_segments <= 0 or available_ports <= 0:
+        return [0] * max(num_segments, 0)
+
+    base = available_ports // num_segments
+    remainder = available_ports % num_segments
+    distribution = [base] * num_segments
+    for index in range(remainder):
+        distribution[index] += 1
+    return distribution
 
 
 def _generate_switch_section(topology_data, num_switches):
-    output = "=" * 90 + "\n"
-    output += "2. CONFIGURACION DE SWITCHES\n"
-    output += "=" * 90 + "\n"
-    
-    # Agrupar por switch
-    switches = {s: [] for s in range(1, num_switches + 1)}
-    for data in topology_data:
-        switches[data['switch_id']].append(data)
-        
-    for s_id in range(1, num_switches + 1):
-        output += f"\nSWITCH {s_id}\n"
-        output += "-" * 90 + "\n"
-        
-        subnets = switches[s_id]
-        if not subnets:
-            output += "  (Sin subredes asignadas)\n"
+    lines = ["=" * 90, "2. CONFIGURACION DE SWITCHES", "=" * 90]
+
+    switches = {switch_id: [] for switch_id in range(1, num_switches + 1)}
+    for subnet_data in topology_data:
+        switches[subnet_data["switch_id"]].append(subnet_data)
+
+    for switch_id in range(1, num_switches + 1):
+        lines.extend(["", f"SWITCH {switch_id}", "-" * 90])
+        assigned = switches[switch_id]
+        if not assigned:
+            lines.append("  (Sin subredes asignadas)")
             continue
-            
-        # VLANs
-        output += "  Base de Datos VLAN:\n"
-        for sub in subnets:
-            output += f"    - VLAN {sub['vlan_id']}: Nombre 'Subred_{sub['id']}'\n"
-        output += "\n"
-        
-        # Puertos Uplink (hacia Routers)
-        output += "  Puertos Uplink (Hacia Router):\n"
-        for i, sub in enumerate(subnets):
-            # Asumimos un cable por subred hacia el router (modelo simple)
-            output += f"    - Fa0/{i+1}: Modo ACCESS (o TRUNK) -> VLAN {sub['vlan_id']} (Hacia Router {sub['router_id']})\n"
-        output += "\n"
-        
-        # Puertos Access (hacia PCs)
-        output += "  Puertos de Acceso (Hacia Dispositivos):\n"
-        # Distribuir puertos restantes (24 - uplinks) entre las VLANs
-        uplinks_count = len(subnets)
-        available_ports = 24 - uplinks_count
-        ports_per_vlan = available_ports // len(subnets)
-        
+
+        lines.append("  Base de Datos VLAN:")
+        for subnet_data in assigned:
+            lines.append(f"    - VLAN {subnet_data['vlan_id']}: Nombre 'Subred_{subnet_data['id']}'")
+
+        lines.append("")
+        lines.append("  Puertos Uplink (Hacia Router):")
+        for uplink_index, subnet_data in enumerate(assigned, start=1):
+            lines.append(
+                (
+                    f"    - Fa0/{uplink_index}: Modo ACCESS (o TRUNK) -> "
+                    f"VLAN {subnet_data['vlan_id']} (Hacia Router {subnet_data['router_id']})"
+                )
+            )
+
+        uplinks_count = len(assigned)
+        lines.append("")
+        lines.append("  Puertos de Acceso (Hacia Dispositivos):")
+
+        available_ports = max(24 - uplinks_count, 0)
+        port_distribution = _distribute_access_ports(available_ports, len(assigned))
+
         current_port = uplinks_count + 1
-        for sub in subnets:
-            end_port = current_port + ports_per_vlan - 1
-            if end_port > 24: end_port = 24
-            
-            output += f"    - Fa0/{current_port}-{end_port}: Modo ACCESS -> VLAN {sub['vlan_id']} (Subred {sub['id']})\n"
+        for subnet_data, ports_for_vlan in zip(assigned, port_distribution):
+            if ports_for_vlan <= 0:
+                lines.append(
+                    (
+                        f"    - VLAN {subnet_data['vlan_id']}: "
+                        "sin puertos libres en este switch (requiere expansion)."
+                    )
+                )
+                continue
+
+            end_port = current_port + ports_for_vlan - 1
+            lines.append(
+                (
+                    f"    - Fa0/{current_port}-Fa0/{end_port}: "
+                    f"Modo ACCESS -> VLAN {subnet_data['vlan_id']} (Subred {subnet_data['id']})"
+                )
+            )
             current_port = end_port + 1
-            
-    return output
+
+    return "\n".join(lines)
 
 
 def _generate_devices_section(topology_data):
-    output = "=" * 90 + "\n"
-    output += "3. CONFIGURACION DE DISPOSITIVOS (Resumen)\n"
-    output += "=" * 90 + "\n"
-    
-    for data in topology_data:
-        output += f"\nSUBRED {data['id']} ({data['num_hosts']} dispositivos) - VLAN {data['vlan_id']}\n"
-        output += "-" * 90 + "\n"
-        output += f"  Red: {data['subnet']} | Gateway: {data['gateway']}\n\n"
-        
-        # Generar solo los primeros 3 dispositivos
-        limit = 3
-        count = 0
-        current_ip = data['subnet'].network_address + 2
-        
-        # Iterar para mostrar ejemplos
-        for i in range(data['num_hosts']):
-            if count < limit:
-                output += f"  PC_{data['id']}_{i+1}:\n"
-                output += f"    IP: {current_ip}  |  Mask: {data['mask_str']}  |  Gateway: {data['gateway']}\n"
-                output += f"    Conectar a: Switch {data['switch_id']} (Puerto de VLAN {data['vlan_id']})\n"
-                count += 1
-            
+    lines = ["=" * 90, "3. CONFIGURACION DE DISPOSITIVOS (Resumen)", "=" * 90]
+
+    for subnet_data in topology_data:
+        lines.extend(
+            [
+                "",
+                (
+                    f"SUBRED {subnet_data['id']} "
+                    f"({subnet_data['num_hosts']} dispositivos) - VLAN {subnet_data['vlan_id']}"
+                ),
+                "-" * 90,
+                f"  Red: {subnet_data['subnet']} | Gateway: {subnet_data['gateway']}",
+                "",
+            ]
+        )
+
+        sample_limit = 3
+        current_ip = subnet_data["subnet"].network_address + 2
+
+        shown_hosts = min(subnet_data["num_hosts"], sample_limit)
+        for host_index in range(shown_hosts):
+            lines.extend(
+                [
+                    f"  PC_{subnet_data['id']}_{host_index + 1}:",
+                    (
+                        f"    IP: {current_ip} | Mask: {subnet_data['mask_str']} "
+                        f"| Gateway: {subnet_data['gateway']}"
+                    ),
+                    (
+                        f"    Conectar a: Switch {subnet_data['switch_id']} "
+                        f"(Puerto de VLAN {subnet_data['vlan_id']})"
+                    ),
+                ]
+            )
             current_ip = ipaddress.IPv4Address(int(current_ip) + 1)
-            
-            if current_ip >= data['subnet'].broadcast_address:
-                break
-        
-        remaining = data['num_hosts'] - count
+
+        remaining = subnet_data["num_hosts"] - shown_hosts
         if remaining > 0:
-            output += f"\n  ... y {remaining} dispositivos más configurados secuencialmente.\n"
-            
-    return output
+            lines.append(f"\n  ... y {remaining} dispositivos mas configurados secuencialmente.")
+
+    return "\n".join(lines)
 
 
 def _generate_router_interconnection(num_routers):
-    if num_routers <= 1: return ""
-    output = f"\n{'=' * 90}\nINTERCONEXION DE ROUTERS\n{'=' * 90}\n"
-    for r in range(1, num_routers):
-        output += f"  Router {r} Serial0/0/0 <---> Router {r + 1} Serial0/0/1\n"
-    return output
+    if num_routers <= 1:
+        return ""
+
+    lines = ["", "=" * 90, "INTERCONEXION DE ROUTERS", "=" * 90]
+    for router_id in range(1, num_routers):
+        lines.append(
+            f"  Router {router_id} Serial0/0/0 <---> Router {router_id + 1} Serial0/0/1"
+        )
+    return "\n".join(lines)
 
 
 def _generate_recommendations():
-    output = f"\n{'=' * 90}\nRECOMENDACIONES\n{'=' * 90}\n"
-    output += "1. Si usas un solo cable por VLAN hacia el router, configura los puertos del switch en modo ACCESS para esa VLAN.\n"
-    output += "2. Si prefieres 'Router-on-a-Stick', configura un solo TRUNK en el switch y subinterfaces en el router (ej: Gi0/0.10).\n"
-    output += "3. Asegúrate de crear las VLANs en la base de datos del switch (vlan database).\n"
-    return output
+    lines = [
+        "",
+        "=" * 90,
+        "RECOMENDACIONES",
+        "=" * 90,
+        "1. Si usas un solo cable por VLAN hacia el router, configura el puerto en modo ACCESS.",
+        "2. Si prefieres Router-on-a-Stick, usa un solo TRUNK y subinterfaces (ej: Gi0/0.10).",
+        "3. Crea siempre las VLANs en el switch antes de asignar puertos.",
+    ]
+    return "\n".join(lines)

@@ -1,63 +1,93 @@
-"""
-Utilidades de validación para la calculadora de red IP
-"""
+"""Validation helpers used by the GUI and core entry points."""
+
+from __future__ import annotations
+
 import ipaddress
 from tkinter import messagebox
 
 
-def validate_ip_cidr(ip_input):
-    """
-    Valida que el input sea una IP válida con formato CIDR
-    Returns: (bool, ipaddress.IPv4Network or None, str error_message)
-    """
-    if not ip_input or '/' not in ip_input:
-        return False, None, "Formato inválido. Usa IP/CIDR (ej: 192.168.0.11/24)"
-    
+def validate_ip_cidr(ip_input: str):
+    """Validate ``IP/CIDR`` input and return an IPv4 network."""
+    normalized = (ip_input or "").strip()
+    if not normalized or "/" not in normalized:
+        return False, None, "Formato invalido. Usa IP/CIDR (ej: 192.168.0.11/24)."
+
     try:
-        network = ipaddress.IPv4Network(ip_input, strict=False)
-        return True, network, ""
-    except ValueError as e:
-        return False, None, f"IP o máscara inválida: {e}"
+        network = ipaddress.IPv4Network(normalized, strict=False)
+    except ValueError as error:
+        return False, None, f"IP o mascara invalida: {error}"
+
+    return True, network, ""
 
 
-def validate_positive_int(value, field_name="Valor"):
-    """
-    Valida que el valor sea un entero positivo
-    Returns: (bool, int or None, str error_message)
-    """
+def validate_positive_int(value: str, field_name: str = "Valor"):
+    """Validate a strict positive integer."""
     try:
-        num = int(value)
-        if num < 1:
-            return False, None, f"{field_name} debe ser mayor a 0"
-        return True, num, ""
+        number = int(str(value).strip())
     except ValueError:
-        return False, None, f"{field_name} debe ser un número entero válido"
+        return False, None, f"{field_name} debe ser un numero entero valido."
+
+    if number < 1:
+        return False, None, f"{field_name} debe ser mayor a 0."
+
+    return True, number, ""
 
 
-def validate_device_list(devices_str, expected_count):
-    """
-    Valida una lista de dispositivos separados por comas
-    Returns: (bool, list or None, str error_message)
-    """
+def validate_non_negative_int(value: str, field_name: str = "Valor"):
+    """Validate a non-negative integer (0 allowed)."""
     try:
-        devices_list = [int(x.strip()) for x in devices_str.split(',') if x.strip()]
-        
-        if len(devices_list) != expected_count:
-            return False, None, f"Debes especificar {expected_count} valores separados por comas. Ingresaste {len(devices_list)}"
-        
-        if any(d < 1 for d in devices_list):
-            return False, None, "Todos los valores deben ser mayores a 0"
-        
-        return True, devices_list, ""
+        number = int(str(value).strip())
     except ValueError:
-        return False, None, "Los valores deben ser números enteros válidos"
+        return False, None, f"{field_name} debe ser un numero entero valido."
+
+    if number < 0:
+        return False, None, f"{field_name} debe ser mayor o igual a 0."
+
+    return True, number, ""
 
 
-def show_error(message):
-    """Muestra un mensaje de error"""
+def parse_int_list(values: str):
+    """Parse comma-separated integer values."""
+    parsed = []
+    for raw in str(values).split(","):
+        value = raw.strip()
+        if not value:
+            continue
+        parsed.append(int(value))
+    return parsed
+
+
+def validate_device_list(devices_str: str, expected_count: int):
+    """Validate a device list that must match ``expected_count``."""
+    try:
+        devices = parse_int_list(devices_str)
+    except ValueError:
+        return False, None, "Los valores deben ser numeros enteros validos."
+
+    if len(devices) != expected_count:
+        return (
+            False,
+            None,
+            f"Debes especificar {expected_count} valores separados por comas. "
+            f"Ingresaste {len(devices)}.",
+        )
+
+    if any(device < 1 for device in devices):
+        return False, None, "Todos los valores deben ser mayores a 0."
+
+    return True, devices, ""
+
+
+def show_error(message: str):
+    """Show an error dialog."""
     messagebox.showerror("Error", message)
 
 
-def show_warning(message):
-    """Muestra un mensaje de advertencia"""
+def show_warning(message: str):
+    """Show a warning dialog."""
     messagebox.showwarning("Aviso", message)
+
+
+def show_info(message: str):
+    """Show an informational dialog."""
+    messagebox.showinfo("Informacion", message)

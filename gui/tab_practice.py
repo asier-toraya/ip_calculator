@@ -1,284 +1,278 @@
-"""
-Pestaña 2: Práctica Manual Guiada
-"""
-import tkinter as tk
-from tkinter import ttk
+"""Tab 2: guided practice exercises."""
+
+from __future__ import annotations
+
 import ipaddress
 import math
 import random
+import tkinter as tk
+from tkinter import ttk
+
 from utils import validators
+
+from .theme import configure_output_text
+from .ui_utils import clear_entries, copy_text_to_clipboard, set_text_output
 
 
 class PracticeTab:
     def __init__(self, parent):
-        self.frame = ttk.Frame(parent)
-        self.state = {'mode': None, 'ip': None, 'cidr': None, 'network': None, 'num_subnets': None}
+        self.frame = ttk.Frame(parent, style="App.TFrame", padding=16)
+        self.state = {
+            "mode": None,
+            "ip": None,
+            "cidr": None,
+            "network": None,
+            "num_subnets": None,
+        }
         self._create_widgets()
-    
+
     def _create_widgets(self):
-        main = tk.Frame(self.frame, padx=20, pady=20)
-        main.pack(fill=tk.BOTH, expand=True)
-        
-        tk.Label(main, text="PRACTICA MANUAL GUIADA", font=('Arial', 16, 'bold'), 
-                fg='#2196F3').pack(pady=10)
-        tk.Label(main, text="Aprende calculando con retroalimentacion inmediata", 
-                font=('Arial', 10, 'italic')).pack(pady=5)
-        
-        ttk.Separator(main, orient='horizontal').pack(fill=tk.X, pady=15)
-        
-        # Botones
-        button_frame = tk.Frame(main)
-        button_frame.pack(pady=10)
-        
-        tk.Button(button_frame, text="Nuevo Ejercicio Basico", command=self._start_basic,
-                 bg='#4CAF50', fg='white', font=('Arial', 11, 'bold'), 
-                 padx=20, pady=10).pack(side=tk.LEFT, padx=10)
-        tk.Button(button_frame, text="Nuevo Ejercicio de Subredes", command=self._start_subnets,
-                 bg='#2196F3', fg='white', font=('Arial', 11, 'bold'), 
-                 padx=20, pady=10).pack(side=tk.LEFT, padx=10)
-        
-        # Área de práctica
-        practice_area = tk.Frame(main)
-        practice_area.pack(fill=tk.BOTH, expand=True, pady=10)
-        
-        # Frame de inputs
-        input_frame = tk.LabelFrame(practice_area, text="Tus Respuestas", 
-                                    font=('Arial', 11, 'bold'), padx=15, pady=15)
-        input_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
-        
-        # Ejercicio básico
-        self._create_basic_inputs(input_frame)
-        
-        # Ejercicio de subredes
-        self._create_subnet_inputs(input_frame)
-        
-        # Frame de feedback
-        feedback_frame = tk.LabelFrame(practice_area, text="Instrucciones y Retroalimentacion", 
-                                      font=('Arial', 11, 'bold'), padx=10, pady=10)
-        feedback_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-        
-        scrollbar = tk.Scrollbar(feedback_frame)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        self.feedback_text = tk.Text(feedback_frame, height=25, wrap=tk.WORD, 
-                                     font=('Courier New', 9), yscrollcommand=scrollbar.set)
-        self.feedback_text.pack(fill=tk.BOTH, expand=True)
-        scrollbar.config(command=self.feedback_text.yview)
-        
-        # Mensaje inicial
-        initial_msg = """BIENVENIDO A LA PRACTICA GUIADA
+        title_row = ttk.Frame(self.frame, style="App.TFrame")
+        title_row.pack(fill=tk.X)
 
-OBJETIVO: Aprender a calcular parametros de red manualmente
+        ttk.Label(title_row, text="Practica Manual Guiada", style="Section.TLabel").pack(anchor="w")
+        ttk.Label(
+            title_row,
+            text="Entrena calculos de red y subnetting con verificacion inmediata.",
+            style="Subtitle.TLabel",
+        ).pack(anchor="w", pady=(2, 0))
 
-EJERCICIOS:
-1. BASICO: Calcula mascara, red, broadcast, salto y rango de hosts
-2. SUBREDES: Calcula bits, nueva mascara y hosts por subred
+        button_row = ttk.Frame(self.frame, style="App.TFrame")
+        button_row.pack(fill=tk.X, pady=(10, 12))
 
-COMO USAR:
-1. Presiona un boton para generar un ejercicio
-2. Calcula manualmente (usa papel si lo necesitas)
-3. Ingresa tus respuestas
-4. Presiona "Verificar"
-5. Los campos correctos se marcan en VERDE
-6. Los incorrectos en ROJO con la respuesta correcta
+        ttk.Button(
+            button_row,
+            text="Nuevo ejercicio basico",
+            command=self._start_basic,
+            style="Primary.TButton",
+        ).pack(side=tk.LEFT)
+        ttk.Button(
+            button_row,
+            text="Nuevo ejercicio de subredes",
+            command=self._start_subnets,
+            style="Secondary.TButton",
+        ).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(
+            button_row,
+            text="Copiar retroalimentacion",
+            command=self._copy_feedback,
+            style="Secondary.TButton",
+        ).pack(side=tk.RIGHT)
 
-Presiona un boton arriba para comenzar!
-"""
-        self.feedback_text.insert('1.0', initial_msg)
-    
-    def _create_basic_inputs(self, parent):
-        """Crea inputs para ejercicio básico"""
-        frame = tk.LabelFrame(parent, text="Ejercicio Basico", padx=10, pady=10)
-        frame.pack(fill=tk.X, pady=5)
-        
-        labels = ["Mascara:", "Red:", "Broadcast:", "Salto:", "Primer host:", "Ultimo host:"]
+        content = ttk.Panedwindow(self.frame, orient=tk.HORIZONTAL)
+        content.pack(fill=tk.BOTH, expand=True)
+
+        left = ttk.Frame(content, style="App.TFrame")
+        right = ttk.Frame(content, style="App.TFrame")
+        content.add(left, weight=1)
+        content.add(right, weight=1)
+
+        self._create_answer_inputs(left)
+        self._create_feedback_panel(right)
+
+    def _create_answer_inputs(self, parent):
+        basic_frame = ttk.LabelFrame(parent, text="Ejercicio basico", padding=10)
+        basic_frame.pack(fill=tk.X)
+
+        labels = ["Mascara", "Red", "Broadcast", "Salto", "Primer host", "Ultimo host"]
         self.basic_entries = []
-        
-        for i, label in enumerate(labels):
-            tk.Label(frame, text=label).grid(row=i, column=0, sticky='w', pady=3)
-            entry = tk.Entry(frame, width=20)
-            entry.grid(row=i, column=1, pady=3, padx=5)
+        for row, label in enumerate(labels):
+            ttk.Label(basic_frame, text=f"{label}:").grid(row=row, column=0, sticky="w", pady=3)
+            entry = tk.Entry(basic_frame, width=24)
+            entry.grid(row=row, column=1, padx=(8, 0), pady=3)
             self.basic_entries.append(entry)
-        
-        tk.Button(frame, text="Verificar Respuestas", command=self._verify_basic,
-                 bg='#FF9800', fg='white', font=('Arial', 10, 'bold'), 
-                 padx=15, pady=5).grid(row=len(labels), column=0, columnspan=2, pady=10)
-    
-    def _create_subnet_inputs(self, parent):
-        """Crea inputs para ejercicio de subredes"""
-        frame = tk.LabelFrame(parent, text="Ejercicio de Subredes", padx=10, pady=10)
-        frame.pack(fill=tk.X, pady=5)
-        
-        labels = ["Bits:", "Nueva mascara:", "Hosts/subred:"]
+
+        ttk.Button(
+            basic_frame,
+            text="Verificar respuestas basicas",
+            command=self._verify_basic,
+            style="Secondary.TButton",
+        ).grid(row=len(labels), column=0, columnspan=2, pady=(10, 0), sticky="we")
+
+        subnet_frame = ttk.LabelFrame(parent, text="Ejercicio de subredes", padding=10)
+        subnet_frame.pack(fill=tk.X, pady=(10, 0))
+
+        subnet_labels = ["Bits", "Nueva mascara", "Hosts por subred"]
         self.subnet_entries = []
-        
-        for i, label in enumerate(labels):
-            tk.Label(frame, text=label).grid(row=i, column=0, sticky='w', pady=3)
-            entry = tk.Entry(frame, width=20)
-            entry.grid(row=i, column=1, pady=3, padx=5)
+        for row, label in enumerate(subnet_labels):
+            ttk.Label(subnet_frame, text=f"{label}:").grid(row=row, column=0, sticky="w", pady=3)
+            entry = tk.Entry(subnet_frame, width=24)
+            entry.grid(row=row, column=1, padx=(8, 0), pady=3)
             self.subnet_entries.append(entry)
-        
-        tk.Button(frame, text="Verificar Subredes", command=self._verify_subnets,
-                 bg='#FF9800', fg='white', font=('Arial', 10, 'bold'), 
-                 padx=15, pady=5).grid(row=len(labels), column=0, columnspan=2, pady=10)
-    
+
+        ttk.Button(
+            subnet_frame,
+            text="Verificar respuestas de subredes",
+            command=self._verify_subnets,
+            style="Secondary.TButton",
+        ).grid(row=len(subnet_labels), column=0, columnspan=2, pady=(10, 0), sticky="we")
+
+    def _create_feedback_panel(self, parent):
+        feedback_frame = ttk.LabelFrame(parent, text="Instrucciones y retroalimentacion", padding=8)
+        feedback_frame.pack(fill=tk.BOTH, expand=True)
+
+        scrollbar = ttk.Scrollbar(feedback_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.feedback_text = tk.Text(
+            feedback_frame,
+            height=25,
+            wrap=tk.WORD,
+            font=("Cascadia Mono", 9),
+            yscrollcommand=scrollbar.set,
+        )
+        self.feedback_text.pack(fill=tk.BOTH, expand=True)
+        configure_output_text(self.feedback_text)
+        scrollbar.config(command=self.feedback_text.yview)
+
+        set_text_output(
+            self.feedback_text,
+            (
+                "PRACTICA GUIADA\n\n"
+                "1) Elige un tipo de ejercicio.\n"
+                "2) Resuelve manualmente.\n"
+                "3) Pulsa verificar.\n\n"
+                "Los campos correctos se marcan en verde y los incorrectos en rojo."
+            ),
+        )
+
+    def _copy_feedback(self):
+        copied = copy_text_to_clipboard(self.frame.winfo_toplevel(), self.feedback_text)
+        if copied:
+            validators.show_info("Retroalimentacion copiada al portapapeles.")
+        else:
+            validators.show_warning("No hay texto para copiar.")
+
+    def _set_entries_color(self, entries, color):
+        for entry in entries:
+            entry.configure(bg=color)
+
     def _start_basic(self):
-        """Inicia ejercicio básico"""
-        self.state['mode'] = 'basic'
+        self.state["mode"] = "basic"
         octets = [random.randint(1, 254) for _ in range(4)]
-        ip = '.'.join(map(str, octets))
+        ip = ".".join(map(str, octets))
         cidr = random.choice([8, 16, 24, 25, 26, 27, 28, 29, 30])
-        self.state['ip'] = ip
-        self.state['cidr'] = cidr
-        self.state['network'] = ipaddress.IPv4Network(f"{ip}/{cidr}", strict=False)
-        
-        for entry in self.basic_entries:
-            entry.delete(0, tk.END)
-            entry.config(bg='white')
-        
-        self.feedback_text.delete('1.0', tk.END)
-        output = f"EJERCICIO BASICO\n{'=' * 80}\n\nIP: {ip}/{cidr}\n\n"
-        output += "CALCULA:\n1. Mascara de red\n2. Direccion de red\n3. Broadcast\n"
-        output += "4. Salto de bloque\n5. Primer host\n6. Ultimo host\n\n"
-        
-        output += "GUIA DE CALCULO RAPIDO\n" + "=" * 80 + "\n\n"
-        output += "1. MASCARA DE RED:\n"
-        output += f"   /{cidr} = {cidr} bits en 1\n"
-        output += f"   {cidr} / 8 = {cidr // 8} octetos completos en 255\n"
-        if cidr % 8 != 0:
-            remaining = cidr % 8
-            values = [128, 192, 224, 240, 248, 252, 254, 255]
-            output += f"   Quedan {remaining} bits -> Octeto {cidr // 8 + 1} = {values[remaining - 1]}\n"
-        output += "   Resto de octetos = 0\n\n"
-        
-        output += "2. DIRECCION DE RED:\n"
-        output += "   Haz AND entre IP y Mascara (bit a bit)\n"
-        output += "   TRUCO: Octetos con mascara 255 quedan igual\n"
-        output += "          Octetos con mascara 0 se vuelven 0\n\n"
-        
-        output += "3. BROADCAST:\n"
-        output += "   Wildcard = 255.255.255.255 - Mascara\n"
-        output += "   Broadcast = Red + Wildcard\n"
-        output += "   TRUCO: Donde mascara es 0, broadcast es 255\n\n"
-        
-        output += "4. SALTO DE BLOQUE:\n"
-        output += "   Busca ultimo octeto de mascara que NO sea 255\n"
-        output += "   Salto = 256 - ese octeto\n\n"
-        
-        output += "5-6. HOSTS:\n"
-        output += "   Primer host = Red + 1\n"
-        output += "   Ultimo host = Broadcast - 1\n\n"
-        
-        output += "TABLA DE REFERENCIA:\n"
-        output += "/8  -> 255.0.0.0       | /24 -> 255.255.255.0\n"
-        output += "/16 -> 255.255.0.0     | /25 -> 255.255.255.128\n"
-        output += "/26 -> 255.255.255.192 | /27 -> 255.255.255.224\n"
-        output += "/28 -> 255.255.255.240 | /29 -> 255.255.255.248\n"
-        output += "/30 -> 255.255.255.252\n"
-        
-        self.feedback_text.insert('1.0', output)
-    
+
+        self.state["ip"] = ip
+        self.state["cidr"] = cidr
+        self.state["network"] = ipaddress.IPv4Network(f"{ip}/{cidr}", strict=False)
+
+        clear_entries(self.basic_entries)
+        self._set_entries_color(self.basic_entries, "white")
+
+        guide = [
+            "EJERCICIO BASICO",
+            "=" * 80,
+            "",
+            f"IP: {ip}/{cidr}",
+            "",
+            "Calcula:",
+            "1. Mascara de red",
+            "   Tip: /CIDR -> octetos completos en 255 y el parcial con tabla 128,192,224,240,248,252,254.",
+            "2. Direccion de red",
+            "   Tip: IP AND Mascara; donde la mascara es 255 se conserva, donde es 0 se vuelve 0.",
+            "3. Broadcast",
+            "   Tip: Broadcast = Red + Wildcard (o poner en 255 todos los bits de host).",
+            "4. Salto de bloque",
+            "   Tip: Salto = 256 - octeto de mascara que no sea 255.",
+            "5. Primer host",
+            "   Tip: Primer host = Direccion de red + 1.",
+            "6. Ultimo host",
+            "   Tip: Ultimo host = Broadcast - 1.",
+        ]
+        set_text_output(self.feedback_text, "\n".join(guide))
+
     def _start_subnets(self):
-        """Inicia ejercicio de subredes"""
-        self.state['mode'] = 'subnets'
+        self.state["mode"] = "subnets"
         octets = [random.randint(1, 254) for _ in range(4)]
-        ip = '.'.join(map(str, octets))
+        ip = ".".join(map(str, octets))
         cidr = random.choice([16, 20, 24])
         num_subnets = random.randint(2, 8)
-        
-        self.state['ip'] = ip
-        self.state['cidr'] = cidr
-        self.state['num_subnets'] = num_subnets
-        
-        for entry in self.subnet_entries:
-            entry.delete(0, tk.END)
-            entry.config(bg='white')
-        
-        self.feedback_text.delete('1.0', tk.END)
-        output = f"EJERCICIO DE SUBREDES\n{'=' * 80}\n\n"
-        output += f"Red base: {ip}/{cidr}\n"
-        output += f"Numero de subredes necesarias: {num_subnets}\n\n"
-        output += "CALCULA:\n1. Bits necesarios\n2. Nueva mascara (formato /XX)\n3. Hosts por subred\n\n"
-        
-        output += "GUIA DE CALCULO:\n"
-        output += "1. Bits prestados (n) = log2(subredes) redondeado arriba\n"
-        output += "   Ejemplo: para 5 subredes -> 2^2=4 (no alcanza), 2^3=8 (si alcanza) -> 3 bits\n\n"
-        output += "2. Nueva mascara = Mascara original + Bits prestados\n"
-        output += f"   Ejemplo: /{cidr} + n\n\n"
-        output += "3. Hosts por subred = 2^(32 - nueva mascara) - 2\n"
-        output += "   (Se restan 2 por la direccion de red y el broadcast)\n"
-        
-        self.feedback_text.insert('1.0', output)
-    
+
+        self.state["ip"] = ip
+        self.state["cidr"] = cidr
+        self.state["num_subnets"] = num_subnets
+
+        clear_entries(self.subnet_entries)
+        self._set_entries_color(self.subnet_entries, "white")
+
+        guide = [
+            "EJERCICIO DE SUBREDES",
+            "=" * 80,
+            "",
+            f"Red base: {ip}/{cidr}",
+            f"Subredes solicitadas: {num_subnets}",
+            "",
+            "Calcula:",
+            "1. Bits necesarios",
+            "2. Nueva mascara (/XX)",
+            "3. Hosts por subred",
+            "",
+            "Formula rapida: bits = ceil(log2(subredes))",
+        ]
+        set_text_output(self.feedback_text, "\n".join(guide))
+
     def _verify_basic(self):
-        """Verifica respuestas del ejercicio básico"""
-        if self.state['mode'] != 'basic':
-            validators.show_warning("Primero inicia un ejercicio basico")
+        if self.state["mode"] != "basic":
+            validators.show_warning("Primero inicia un ejercicio basico.")
             return
-        
-        network = self.state['network']
-        mask_octets = [int(x) for x in str(network.netmask).split('.')]
-        determining_octet = next((i for i in range(3, -1, -1) if mask_octets[i] != 255), -1)
-        
+
+        network = self.state["network"]
+        mask_octets = [int(value) for value in str(network.netmask).split(".")]
+        determining_octet = next((idx for idx in range(3, -1, -1) if mask_octets[idx] != 255), -1)
+
         correct = [
             str(network.netmask),
             str(network.network_address),
             str(network.broadcast_address),
             str(256 - mask_octets[determining_octet] if determining_octet >= 0 else 256),
             str(network.network_address + 1),
-            str(network.broadcast_address - 1)
+            str(network.broadcast_address - 1),
         ]
-        
-        labels = ['Mascara', 'Red', 'Broadcast', 'Salto', 'Primer host', 'Ultimo host']
-        results = []
+        labels = ["Mascara", "Red", "Broadcast", "Salto", "Primer host", "Ultimo host"]
+
         all_correct = True
-        
-        for i, (entry, correct_val, label) in enumerate(zip(self.basic_entries, correct, labels)):
-            user_val = entry.get().strip()
-            if user_val == correct_val:
-                entry.config(bg='lightgreen')
-                results.append(f"✅ {label}: CORRECTO")
+        rows = ["RESULTADOS", "=" * 80, ""]
+
+        for entry, expected, label in zip(self.basic_entries, correct, labels):
+            user_value = entry.get().strip()
+            if user_value == expected:
+                entry.configure(bg="#D8F5D0")
+                rows.append(f"OK {label}: correcto")
             else:
-                entry.config(bg='lightcoral')
-                results.append(f"❌ {label}: Tu respuesta: {user_val}, Correcta: {correct_val}")
+                entry.configure(bg="#FAD7D7")
+                rows.append(f"ERROR {label}: tu valor '{user_value}' | esperado '{expected}'")
                 all_correct = False
-        
-        self.feedback_text.delete('1.0', tk.END)
-        output = "RESULTADOS\n" + "=" * 80 + "\n\n"
-        output += "\n".join(results) + "\n\n"
-        output += "EXCELENTE! Todas correctas.\n" if all_correct else "Revisa las respuestas en rojo.\n"
-        self.feedback_text.insert('1.0', output)
-    
+
+        rows.append("")
+        rows.append("Excelente, todo correcto." if all_correct else "Corrige los campos marcados en rojo.")
+        set_text_output(self.feedback_text, "\n".join(rows))
+
     def _verify_subnets(self):
-        """Verifica respuestas del ejercicio de subredes"""
-        if self.state['mode'] != 'subnets':
-            validators.show_warning("Primero inicia un ejercicio de subredes")
+        if self.state["mode"] != "subnets":
+            validators.show_warning("Primero inicia un ejercicio de subredes.")
             return
-        
-        num_subnets = self.state['num_subnets']
-        base_cidr = self.state['cidr']
-        
-        correct_bits = str(math.ceil(math.log2(num_subnets)))
-        correct_newmask = f"/{base_cidr + int(correct_bits)}"
-        correct_hosts = str(2**(32 - (base_cidr + int(correct_bits))) - 2)
-        
-        correct = [correct_bits, correct_newmask, correct_hosts]
-        labels = ['Bits', 'Mascara', 'Hosts']
-        results = []
+
+        num_subnets = self.state["num_subnets"]
+        base_cidr = self.state["cidr"]
+
+        bits = math.ceil(math.log2(num_subnets))
+        correct = [str(bits), f"/{base_cidr + bits}", str((2 ** (32 - (base_cidr + bits))) - 2)]
+        labels = ["Bits", "Mascara", "Hosts"]
+
         all_correct = True
-        
-        for entry, correct_val, label in zip(self.subnet_entries, correct, labels):
-            user_val = entry.get().strip()
-            if user_val == correct_val:
-                entry.config(bg='lightgreen')
-                results.append(f"✅ {label}: CORRECTO")
+        rows = ["RESULTADOS", "=" * 80, ""]
+
+        for entry, expected, label in zip(self.subnet_entries, correct, labels):
+            user_value = entry.get().strip()
+            if user_value == expected:
+                entry.configure(bg="#D8F5D0")
+                rows.append(f"OK {label}: correcto")
             else:
-                entry.config(bg='lightcoral')
-                results.append(f"❌ {label}: {user_val} -> Correcta: {correct_val}")
+                entry.configure(bg="#FAD7D7")
+                rows.append(f"ERROR {label}: tu valor '{user_value}' | esperado '{expected}'")
                 all_correct = False
-        
-        self.feedback_text.delete('1.0', tk.END)
-        output = "RESULTADOS\n" + "=" * 80 + "\n\n"
-        output += "\n".join(results) + "\n\n"
-        output += "EXCELENTE! Todas correctas.\n" if all_correct else "Revisa las respuestas en rojo.\n"
-        self.feedback_text.insert('1.0', output)
+
+        rows.append("")
+        rows.append("Excelente, todo correcto." if all_correct else "Corrige los campos marcados en rojo.")
+        set_text_output(self.feedback_text, "\n".join(rows))

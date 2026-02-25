@@ -1,61 +1,122 @@
 # Calculadora de Red IP
 
-Aplicación completa para cálculos de redes IP con interfaz gráfica.
+Aplicacion de escritorio en Python + Tkinter para practicar y automatizar calculos de redes IPv4.
 
-## Características
+## Que incluye
 
-- **Cálculo Detallado**: Cálculos paso a paso de máscaras, redes, broadcast y subredes
-- **Práctica Guiada**: Ejercicios interactivos con retroalimentación inmediata
-- **Generador CPT**: Crea esquemas completos para Cisco Packet Tracer
+- Calculo detallado de una red (`IP/CIDR`): mascara, red, broadcast, wildcard, hosts y rango util.
+- Subnetting fijo por numero de subredes.
+- VLSM por numero de dispositivos por subred.
+- Modo de practica guiada con verificacion instantanea.
+- Generador de esquemas para Cisco Packet Tracer (basico y avanzado).
+- Interfaz unificada con tema visual consistente y utilidades de copiar salida.
 
-## Estructura del Proyecto
+## Estructura del proyecto
 
-```
-DecToBin/
-├── main.py                    # Punto de entrada principal
-├── gui/                       # Interfaz gráfica
-│   ├── __init__.py
-│   ├── main_window.py        # Ventana principal
-│   ├── tab_detailed.py       # Pestaña de cálculo detallado
-│   ├── tab_practice.py       # Pestaña de práctica
-│   └── tab_cpt.py            # Pestaña de Cisco Packet Tracer
-├── core/                      # Lógica de negocio
-│   ├── __init__.py
-│   ├── network_calc.py       # Cálculos de red
-│   ├── subnet_calc.py        # Cálculos de subredes
-│   └── cpt_generator.py      # Generador de esquemas CPT
-└── utils/                     # Utilidades
-    ├── __init__.py
-    └── validators.py         # Validaciones de entrada
-```
-
-## Uso
-
-Ejecutar el programa:
-```bash
-python main.py
+```text
+ip_calculator/
+|-- main.py
+|-- run.bat
+|-- build_exe.bat
+|-- requirements-dev.txt
+|-- core/
+|   |-- __init__.py
+|   |-- ip_tools.py
+|   |-- network_calc.py
+|   |-- subnet_calc.py
+|   |-- cpt_generator.py
+|   `-- cpt_advanced_generator.py
+|-- gui/
+|   |-- __init__.py
+|   |-- main_window.py
+|   |-- theme.py
+|   |-- ui_utils.py
+|   |-- tab_detailed.py
+|   |-- tab_practice.py
+|   |-- tab_cpt.py
+|   `-- tab_cpt_advanced.py
+|-- utils/
+|   |-- __init__.py
+|   `-- validators.py
+`-- tests/
+    `-- test_core.py
 ```
 
 ## Requisitos
 
-- Python 3.6+
-- tkinter (incluido en Python estándar)
-- ipaddress (incluido en Python estándar)
+- Python 3.10+ (probado con 3.14)
+- Tkinter (incluido normalmente con Python en Windows)
 
-## Funcionalidades
+## Formas rapidas de ejecutar
 
-### Pestaña 1: Cálculo Detallado
-- Cálculo detallado de parámetros de red
-- División en subredes
-- Optimización por número de dispositivos
+### Opcion 1: doble clic (Windows)
 
-### Pestaña 2: Práctica Manual
-- Ejercicios básicos de redes
-- Ejercicios de subredes
-- Verificación automática de respuestas
+1. Ejecuta `run.bat`.
+2. El script usa `.venv\Scripts\python.exe` si existe; si no, usa `python` del sistema.
 
-### Pestaña 3: Cisco Packet Tracer
-- Generación automática de topologías
-- Configuración detallada de routers
-- Configuración de switches con VLANs
-- Asignación automática de IPs
+### Opcion 2: terminal
+
+```bash
+python main.py
+```
+
+## Generar ejecutable (.exe)
+
+> Requiere `pyinstaller`.
+
+1. Instalar dependencia:
+
+```bash
+python -m pip install -r requirements-dev.txt
+```
+
+2. Generar ejecutable:
+
+```bash
+build_exe.bat
+```
+
+3. Resultado esperado: `dist/ip-calculator.exe`
+
+## Paquete portable
+
+Se genera tambien un paquete comprimido listo para compartir:
+
+- `dist/ip-calculator-portable.zip`
+- Incluye `ip-calculator.exe` y `README.md`
+
+## Generar instalador (Setup)
+
+Se incluye configuracion para Inno Setup:
+
+- Script: `installer/ip_calculator.iss`
+- Lanzador: `installer/build_installer.bat`
+
+Requisitos:
+
+1. Tener Inno Setup instalado (`iscc` disponible en `PATH`).
+2. Tener generado antes `dist/ip-calculator.exe`.
+
+Salida esperada:
+
+- `dist/ip-calculator-setup.exe`
+
+## Testing
+
+Ejecuta tests unitarios:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+## Flujo recomendado de uso
+
+1. En **Calculo Detallado**, valida red base y resultado rapido.
+2. Si necesitas reparto fijo, usa **Dividir en subredes**.
+3. Si necesitas optimizacion por hosts, usa **VLSM por dispositivos**.
+4. Para laboratorio, pasa a **CPT Basico** o **CPT Avanzado** y copia la salida.
+
+## Notas
+
+- El proyecto conserva archivos historicos (`ip_calc.py`, backups) para referencia, pero el punto de entrada oficial es `main.py`.
+- `logs/` y artefactos de build quedan ignorados por `.gitignore`.

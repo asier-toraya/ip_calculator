@@ -1,32 +1,19 @@
-"""
-Calculadora de Red IP - Aplicación Principal
-Autor: Asier Toraya
-Descripción: Calculadora completa de redes IP con funciones de cálculo detallado,
-             práctica guiada y generación de esquemas para Cisco Packet Tracer.
-"""
+"""IP network calculator application entry point."""
 
-from gui import MainWindow, DetailedTab, PracticeTab, CPTTab, CPTAdvancedTab
+from __future__ import annotations
+
+from gui import CPTAdvancedTab, CPTTab, DetailedTab, MainWindow, PracticeTab
 
 
 def main():
-    """Función principal de la aplicación"""
-    # Crear ventana principal
+    """Create main window, register tabs and start the app."""
     app = MainWindow()
-    
-    # Crear y añadir pestañas
-    tab1 = DetailedTab(app.notebook)
-    app.add_tab(tab1, "Calculo Detallado Paso a Paso")
-    
-    tab2 = PracticeTab(app.notebook)
-    app.add_tab(tab2, "Practica Manual Guiada")
-    
-    tab3 = CPTTab(app.notebook)
-    app.add_tab(tab3, "CPT - Cisco Packet Tracer")
-    
-    tab4 = CPTAdvancedTab(app.notebook)
-    app.add_tab(tab4, "CPT Avanzado")
-    
-    # Iniciar aplicación
+
+    app.add_tab(DetailedTab(app.notebook), "Calculo Detallado")
+    app.add_tab(PracticeTab(app.notebook), "Practica Guiada")
+    app.add_tab(CPTTab(app.notebook), "CPT Basico")
+    app.add_tab(CPTAdvancedTab(app.notebook), "CPT Avanzado")
+
     app.run()
 
 
